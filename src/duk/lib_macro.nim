@@ -25,7 +25,7 @@ proc addFunc(libStmts: var NimNode; name: string; fn: NimNode, nargs: int) =
 type
   JSString* = cstring
   JSNumber* = cdouble
-  JSInt* = int
+  JSInt* = cint
   
 type DukLib* = ref object
   builder: proc(ctx: Context)
@@ -47,6 +47,13 @@ proc getRequireFn(ty: JSType): NimNode =
   of jstNumber: bindSym"requireNumber"
   of jstInt: bindSym"requireInt"
   of jstNot: newEmptyNode()
+
+proc getPushFn(ty: JSType): NimNode =
+  case ty
+  of jstString: bindSym"pushString"
+  of jstNumber: bindSym"pushNumber"
+  of jstInt: bindSym"pushInt"
+  of jstNot: newEmptyNode()
   
 proc injectLib*(ctx: Context, lib: DukLib) =
   lib.builder(ctx)
@@ -61,7 +68,12 @@ proc doLibBlock(outStmts: var NimNode, stmtList: NimNode, isObj: bool, objName: 
     let name = $child.name
     child.name = newEmptyNode()
     let cParams = child.params
-    if cParams.len == 2 and $cParams[1][^2] == "Context":
+    let retParam = cParams[0]
+    if cParams.len == 2 and cParams[1][^2] == bindSym"Context":
+      retParam.expect(
+        retParam.kind != nnkEmpty and retParam[^2] == bindSym"RetT",
+        "Return type for processing the raw context must be `RetT`"
+      )
       outStmts.addFunc name, child, -1
     else:
       var params = newSeq[(string, JSType)]()
@@ -74,26 +86,30 @@ proc doLibBlock(outStmts: var NimNode, stmtList: NimNode, isObj: bool, objName: 
         )
         for parmIdent in toSeq(param.children)[0..^3]:
           params.add ($parmIdent, jsTy)
+      retParam.expect(
+        retParam.kind == nnkEmpty or getJSType($retParam) != jstNot,
+        "Return type must be a JS`Type`"
+      )
       var cFnStmts = newStmtList()
       let letSec = nnkLetSection.newNimNode
       for i, tup in params:
         let (name, ty) = tup
-        letSec.add nnkIdentDefs.newTree(
+        cFnStmts.add newLetStmt(
           ident name,
-          newEmptyNode(),
           newCall(ty.getRequireFn, ident"ctx", newIntLitNode i)
         )
-      cFnStmts.add letSec
-      child.name = ident"__cfn"
-      cFnStmts.add child
       let cFnCall = newCall(
-        ident"__cfn",
+        newPar child,
         params.mapIt ident it[0]
       )
-      cFnStmts.add if cParams[0].kind == nnkEmpty:
+      if cParams[0].kind == nnkEmpty:
+        cfnStmts. add cFnCall
+      else:
+        cfnStmts.add newCall(
+          getJSType($retParam).getPushFn,
+          ident"ctx",
           cFnCall
-        else:
-          nnkDiscardStmt.newTree cFnCall
+        ), nnkDotExpr.newTree(newIntLitNode 1, bindSym"RetT")
       let outProc = newProc(
         params = [bindSym"RetT", nnkIdentDefs.newTree(ident"ctx", bindSym"Context", newEmptyNode())],
         body = cFnStmts,

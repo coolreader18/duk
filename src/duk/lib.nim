@@ -40,5 +40,19 @@ proc createHeap*(
 proc `=destroy`(ctx: var Context) =
   ctx.destroyHeap()
 
+const DUK_RET_RETURN = 1.RetT
+
+import ospaths
+
+proc loadJS*(ctx: Context, text, filename: string) =
+  discard ctx.pushString(text)
+  discard ctx.pushString(filename)
+  discard ctx.compileRaw(nil, 0, 2)
+  discard ctx.pcall(0)
+
+proc loadFile*(ctx: Context, filename: string) =
+  ctx.loadJS readFile filename, filename
+
+
 import lib_macro
 export lib_macro

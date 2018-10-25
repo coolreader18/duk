@@ -1,2 +1,2 @@
 print("from js");
-setA(9);
+setA(get22());

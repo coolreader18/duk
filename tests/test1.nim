@@ -10,8 +10,6 @@ import unittest
 import duk
 import os
 
-const testjs = staticRead("test.js")
-
 var a = 2
 
 duklib testLib:
@@ -21,15 +19,15 @@ duklib testLib:
   proc setA(newA: JSInt) =
     a = newA
 
+  proc get22(): JSInt =
+    22
 
+const testjs = staticRead"test.js"
 
 test "ffi":
   var ctx = createHeap()
   ctx.injectLib testLib
-  discard ctx.pushString(testjs)
-  discard ctx.pushString("test.js")
-  discard ctx.compileRaw(nil, 0, 2)
-  discard ctx.pcall(0)
+  ctx.loadJS testjs, "test.js"
   ctx.pop()
   echo "val of a: ", a
-  check a == 9
+  check a == 22
