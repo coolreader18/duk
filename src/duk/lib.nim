@@ -46,6 +46,7 @@ proc loadJS*(ctx: Context, text, filename: string) =
   discard ctx.pushString(filename)
   discard ctx.compileRaw(nil, 0, 2)
   discard ctx.pcall(0)
+  ctx.pop()
 
 proc loadFile*(ctx: Context, filename: string) =
   ctx.loadJS readFile filename, filename

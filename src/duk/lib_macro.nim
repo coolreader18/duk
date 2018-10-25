@@ -181,4 +181,3 @@ macro duklib*(name, body: untyped): untyped =
     newColonExpr(ident"name", newStrLitNode $name)
   ))
 
-

@@ -33,6 +33,5 @@ test "ffi":
   var ctx = createHeap()
   ctx.injectLib testLib
   ctx.loadJS testjs, "test.js"
-  ctx.pop()
   echo "val of a: ", a
   check a == 22
