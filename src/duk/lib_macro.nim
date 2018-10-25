@@ -1,12 +1,13 @@
 import macros, sequtils, sugar
 
-import duk_wrapper
+import duk_wrapper, consts
 
 proc error(n: NimNode, msg: string) = error(msg, n)
 proc expect(n: NimNode, cond: bool, msg: string) =
   if not cond: n.error(msg)
 
 proc addFunc(libStmts: var NimNode; name: string; fn: NimNode, nargs: int) =
+  fn.addPragma ident"cdecl"
   libStmts.add nnkStmtList.newTree(
         nnkDiscardStmt.newTree newCall(
           bindSym"pushCFunction",
@@ -69,9 +70,9 @@ proc doLibBlock(outStmts: var NimNode, stmtList: NimNode, isObj: bool, objName: 
     child.name = newEmptyNode()
     let cParams = child.params
     let retParam = cParams[0]
-    if cParams.len == 2 and cParams[1][^2] == bindSym"Context":
+    if cParams.len == 2 and cParams[1][^2].eqIdent"Context":
       retParam.expect(
-        retParam.kind != nnkEmpty and retParam[^2] == bindSym"RetT",
+        retParam.kind != nnkEmpty and retParam.eqIdent"RetT",
         "Return type for processing the raw context must be `RetT`"
       )
       outStmts.addFunc name, child, -1
@@ -99,13 +100,13 @@ proc doLibBlock(outStmts: var NimNode, stmtList: NimNode, isObj: bool, objName: 
         args
       )
       if cParams[0].kind == nnkEmpty:
-        cfnStmts. add cFnCall
+        cfnStmts.add cFnCall
       else:
         cfnStmts.add newCall(
           getJSType($retParam).getPushFn,
           ident"ctx",
           cFnCall
-        ), nnkDotExpr.newTree(newIntLitNode 1, bindSym"RetT")
+        ), bindSym"DUK_RET_RETURN"
       let outProc = newProc(
         params = [
           bindSym"RetT",
@@ -113,7 +114,6 @@ proc doLibBlock(outStmts: var NimNode, stmtList: NimNode, isObj: bool, objName: 
         ],
         body = cFnStmts,
       )
-      outProc.addPragma ident"cdecl"
       outStmts.addFunc name, outProc, params.len
   outStmts.add newCall(bindSym"pop", ident"ctx")
 
@@ -129,7 +129,6 @@ macro duklib*(name, body: untyped): untyped =
     ],
     body = libStmts
   )
-  echo repr builder
   newLetStmt(name, nnkObjConstr.newTree(
     bindSym"DukLib",
     newColonExpr(ident"builder", builder),

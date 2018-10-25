@@ -21,6 +21,9 @@ duklib testLib:
 
   proc get22(): JSInt =
     22
+  
+  proc rawCtx(ctx: Context): RetT =
+    discard
 
 const testjs = staticRead"test.js"
 
