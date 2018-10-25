@@ -40,6 +40,7 @@ proc createHeap*(
 proc `=destroy`(ctx: var Context) =
   ctx.destroyHeap()
 
+
 proc loadJS*(ctx: Context, text, filename: string) =
   discard ctx.pushString(text)
   discard ctx.pushString(filename)

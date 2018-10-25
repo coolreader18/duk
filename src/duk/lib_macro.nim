@@ -6,9 +6,9 @@ proc error(n: NimNode, msg: string) = error(msg, n)
 proc expect(n: NimNode, cond: bool, msg: string) =
   if not cond: n.error(msg)
 
-proc addFunc(libStmts: var NimNode; name: string; fn: NimNode, nargs: int) =
+proc addFunc(outStmts: var NimNode; name: string; fn: NimNode, nargs: int) =
   fn.addPragma ident"cdecl"
-  libStmts.add nnkStmtList.newTree(
+  outStmts.add nnkStmtList.newTree(
         nnkDiscardStmt.newTree newCall(
           bindSym"pushCFunction",
           ident"ctx",
@@ -55,6 +55,13 @@ proc getPushFn(ty: JSType): NimNode =
   of jstNumber: bindSym"pushNumber"
   of jstInt: bindSym"pushInt"
   of jstNot: newEmptyNode()
+
+proc getSym(ty: JSType): NimNode =
+  case ty
+  of jstString: bindSym"JSString"
+  of jstNumber: bindSym"JSNumber"
+  of jstInt: bindSym"JSInt"
+  else: newEmptyNode()
   
 proc injectLib*(ctx: Context, lib: DukLib) =
   lib.builder(ctx)
@@ -78,9 +85,25 @@ proc doLibBlock(outStmts: var NimNode, stmtList: NimNode, isObj: bool, objName: 
       outStmts.addFunc name, child, -1
     else:
       var params = newSeq[JSType]()
+      var varargsTy: JSType = jstNot
       for i in 1..<cParams.len:
         let param = cParams[i]
-        let jsTy = getJSType $param[^2]
+        let parTy = param[^2]
+        if parTy.kind == nnkBracketExpr:
+          parTy.expect parTy[0] == ident"varargs", "Expected `varargs`"
+          parTy.expect(
+            param.len == 3 and i == cParams.len - 1,
+            "Only one vararg can be in a parameter list, and at the end"
+          )
+          let jsTy = getJSType $parTy[1]
+          parTy.expect(
+            jsTy != jstNot,
+            "Types for parameters in duk lib function must all be a JS`Type`"
+          )
+          varargsTy = jsTy
+          continue
+
+        let jsTy = getJSType $parTy
         param.expect(
           jsTy != jstNot,
           "Types for parameters in duk lib function must all be a JS`Type`"
@@ -95,6 +118,29 @@ proc doLibBlock(outStmts: var NimNode, stmtList: NimNode, isObj: bool, objName: 
       var args = newSeq[NimNode]()
       for i, ty in params:
         args.add newCall(ty.getRequireFn, ident"ctx", newIntLitNode i)
+      if varargsTy != jstNot:
+        args.add newBlockStmt newStmtList(
+          newVarStmt(
+            ident"va",
+            newCall(
+              nnkBracketExpr.newTree(bindSym"newSeq", varargsTy.getSym)
+            )
+          ),
+          nnkForStmt.newTree(
+            ident"i",
+            infix(
+              newIntLitNode params.len,
+              "..<",
+              newCall(bindSym"getTop", ident"ctx")
+            ),
+            newCall(
+              bindSym"add",
+              ident"va",
+              newCall(varargsTy.getRequireFn, ident"ctx", ident"i")
+            )
+          ),
+          ident"va"
+        )
       let cFnCall = newCall(
         newPar child,
         args
@@ -114,7 +160,7 @@ proc doLibBlock(outStmts: var NimNode, stmtList: NimNode, isObj: bool, objName: 
         ],
         body = cFnStmts,
       )
-      outStmts.addFunc name, outProc, params.len
+      outStmts.addFunc name, outProc, if varargsTy == jstNot: params.len else: -1
   outStmts.add newCall(bindSym"pop", ident"ctx")
 
 macro duklib*(name, body: untyped): untyped =

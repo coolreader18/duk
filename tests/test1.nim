@@ -13,11 +13,13 @@ import os
 var a = 2
 
 duklib testLib:
-  proc print(arg: JSString) =
-    echo arg
+  proc print(args: varargs[JSString]) =
+    for a in args:
+      echo a
 
-  proc setA(newA: JSInt) =
+  proc setA(newA, b: JSInt) =
     a = newA
+    echo b
 
   proc get22(): JSInt =
     22

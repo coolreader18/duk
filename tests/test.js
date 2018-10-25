@@ -1,2 +1,2 @@
-print("from js");
-setA(get22());
+print("from js", "ffff");
+setA(get22(), 10);
