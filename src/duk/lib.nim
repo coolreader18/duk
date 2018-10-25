@@ -9,6 +9,15 @@ type
     free: FreeFunction
   WrongTypeException* = object of Exception
 
+type DukType* = enum
+  dtMinNone = 0, dtUndefined = 1, dtNull = 2, dtBoolean = 3, dtNumber = 4,
+  dtString = 5, dtObject = 6, dtBuffer = 7, dtPointer = 8, dtLightFuncMax = 9
+
+template getDukType*(ctx: Context, idx: IdxT): DukType =
+  DukType ctx.getType(idx)
+template getDukType*(val: JSVal): DukType =
+  getDukType(val.ctx, val.idx)
+
 import converters
 export converters
 
@@ -40,7 +49,6 @@ proc createHeap*(
 proc `=destroy`(ctx: var Context) =
   ctx.destroyHeap()
 
-
 proc loadJS*(ctx: Context, text, filename: string) =
   discard ctx.pushString(text)
   discard ctx.pushString(filename)
@@ -50,7 +58,6 @@ proc loadJS*(ctx: Context, text, filename: string) =
 
 proc loadFile*(ctx: Context, filename: string) =
   ctx.loadJS readFile filename, filename
-
-
+    
 import lib_macro
 export lib_macro

@@ -1,6 +1,6 @@
 import macros, sequtils, sugar
 
-import duk_wrapper, consts
+import duk_wrapper, consts, lib
 
 proc error(n: NimNode, msg: string) = error(msg, n)
 proc expect(n: NimNode, cond: bool, msg: string) =
@@ -65,103 +65,146 @@ proc getSym(ty: JSType): NimNode =
   
 proc injectLib*(ctx: Context, lib: DukLib) =
   lib.builder(ctx)
+  
+type VarargsInfo = tuple[isVa: bool, ty: JSType, isUnTy: bool, fn: NimNode, outTy: NimNode]
 
-proc doLibBlock(outStmts: var NimNode, stmtList: NimNode, isObj: bool, objName: string = "") =
-  outStmts.add newCall(
-    if isObj: bindSym"pushBareObject" else: bindSym"pushGlobalObject",
-    ident"ctx"
-  )
-  for child in stmtList.children:
-    child.expectKind nnkProcDef
-    let name = $child.name
-    child.name = newEmptyNode()
-    let cParams = child.params
-    let retParam = cParams[0]
-    if cParams.len == 2 and cParams[1][^2].eqIdent"Context":
-      retParam.expect(
-        retParam.kind != nnkEmpty and retParam.eqIdent"RetT",
-        "Return type for processing the raw context must be `RetT`"
-      )
-      outStmts.addFunc name, child, -1
-    else:
-      var params = newSeq[JSType]()
-      var varargsTy: JSType = jstNot
-      for i in 1..<cParams.len:
-        let param = cParams[i]
-        let parTy = param[^2]
-        if parTy.kind == nnkBracketExpr:
-          parTy.expect parTy[0] == ident"varargs", "Expected `varargs`"
-          parTy.expect(
-            param.len == 3 and i == cParams.len - 1,
-            "Only one vararg can be in a parameter list, and at the end"
-          )
-          let jsTy = getJSType $parTy[1]
-          parTy.expect(
-            jsTy != jstNot,
-            "Types for parameters in duk lib function must all be a JS`Type`"
-          )
-          varargsTy = jsTy
-          continue
+proc doVarargs(va: var VarargsInfo, parTy: NimNode) =
+  va.isVa = true
+  if $parTy[1] == "typed":
+    parTy.expect(
+      parTy.len == 3,
+      "If the varargs is `typed`, there needs to be a transformer function"
+    )
+    va.isUnTy = true
+    va.fn = parTy[2]
+    va.outTy = newCall(
+      ident"type",
+      va.fn.newCall bindSym"top".newCall bindSym"createHeap".newCall,
+    )
+    parTy[1] = va.outTy
+    parTy.del 2
+  else:
+    let jsTy = getJSType $parTy[1]
+    parTy.expect(
+      jsTy != jstNot,
+      "Types for parameters in duk lib function must all be a JS`Type`"
+    )
+    va.ty = jsTy
 
-        let jsTy = getJSType $parTy
-        param.expect(
-          jsTy != jstNot,
-          "Types for parameters in duk lib function must all be a JS`Type`"
+proc doProc(outStmts: var NimNode, fn: NimNode) = 
+  let name = $fn.name
+  fn.name = newEmptyNode()
+  let cParams = fn.params
+  let retParam = cParams[0]
+  if cParams.len == 2 and cParams[1][^2].eqIdent"Context":
+    retParam.expect(
+      retParam.kind != nnkEmpty and retParam.eqIdent"RetT",
+      "Return type for processing the raw context must be `RetT`"
+    )
+    outStmts.addFunc name, fn, -1
+  else:
+    var params = newSeq[JSType]()
+    var va: VarargsInfo
+    for i in 1..<cParams.len:
+      let param = cParams[i]
+      let parTy = param[^2]
+      if parTy.kind == nnkBracketExpr:
+        parTy.expect parTy[0] == ident"varargs", "Expected `varargs`"
+        parTy.expect(
+          param.len == 3 and i == cParams.len - 1,
+          "Only one vararg can be in a parameter list, and at the end"
         )
-        for _ in toSeq(param.children)[0..^3]:
-          params.add jsTy
-      retParam.expect(
-        retParam.kind == nnkEmpty or getJSType($retParam) != jstNot,
-        "Return type must be a JS`Type`"
+        va.doVarargs parTy
+        continue
+      parTy.expectKind nnkIdent
+      let jsTy = getJSType $parTy
+      param.expect(
+        jsTy != jstNot,
+        "Types for parameters in duk lib function must all be a JS`Type`"
       )
-      var cFnStmts = newStmtList()
-      var args = newSeq[NimNode]()
-      for i, ty in params:
-        args.add newCall(ty.getRequireFn, ident"ctx", newIntLitNode i)
-      if varargsTy != jstNot:
-        args.add newBlockStmt newStmtList(
-          newVarStmt(
+      for _ in toSeq(param.children)[0..^3]:
+        params.add jsTy
+    retParam.expect(
+      retParam.kind == nnkEmpty or getJSType($retParam) != jstNot,
+      "Return type must be a JS`Type`"
+    )
+    var cFnStmts = newStmtList()
+    var args = newSeq[NimNode]()
+    for i, ty in params:
+      args.add newCall(ty.getRequireFn, ident"ctx", newIntLitNode i)
+    if va.isVa:
+      args.add newBlockStmt newStmtList(
+        newVarStmt(
+          ident"va",
+          newCall(
+            nnkBracketExpr.newTree(
+              bindSym"newSeq",
+              if va.isUnTy: va.outTy
+              else: va.ty.getSym
+            )
+          )
+        ),
+        nnkForStmt.newTree(
+          ident"i",
+          infix(
+            newIntLitNode params.len,
+            "..<",
+            newCall(bindSym"getTop", ident"ctx")
+          ),
+          newCall(
+            bindSym"add",
             ident"va",
             newCall(
-              nnkBracketExpr.newTree(bindSym"newSeq", varargsTy.getSym)
+              if va.isUnTy: va.fn
+              else: va.ty.getRequireFn,
+              nnkBracketExpr.newTree(ident"ctx", ident"i")
             )
-          ),
-          nnkForStmt.newTree(
-            ident"i",
-            infix(
-              newIntLitNode params.len,
-              "..<",
-              newCall(bindSym"getTop", ident"ctx")
-            ),
-            newCall(
-              bindSym"add",
-              ident"va",
-              newCall(varargsTy.getRequireFn, ident"ctx", ident"i")
-            )
-          ),
-          ident"va"
-        )
-      let cFnCall = newCall(
-        newPar child,
-        args
+          )
+        ),
+        ident"va"
       )
-      if cParams[0].kind == nnkEmpty:
-        cfnStmts.add cFnCall
-      else:
-        cfnStmts.add newCall(
-          getJSType($retParam).getPushFn,
-          ident"ctx",
-          cFnCall
-        ), bindSym"DUK_RET_RETURN"
-      let outProc = newProc(
-        params = [
-          bindSym"RetT",
-          nnkIdentDefs.newTree(ident"ctx", bindSym"Context", newEmptyNode())
-        ],
-        body = cFnStmts,
+    let cFnCall = newCall(
+      newPar fn,
+      args
+    )
+    if cParams[0].kind == nnkEmpty:
+      cfnStmts.add cFnCall
+    else:
+      cfnStmts.add newCall(
+        getJSType($retParam).getPushFn,
+        ident"ctx",
+        cFnCall
+      ), bindSym"DUK_RET_RETURN"
+    let outProc = newProc(
+      params = [
+        bindSym"RetT",
+        nnkIdentDefs.newTree(ident"ctx", bindSym"Context", newEmptyNode())
+      ],
+      body = cFnStmts,
+    )
+    outStmts.addFunc name, outProc, if va.isVa: -1 else: params.len
+
+proc doLibBlock(outStmts: var NimNode, stmtList: NimNode, isObj: bool, objName: string = "") =
+  outStmts.add if isObj: nnkDiscardStmt.newTree newCall(bindSym"pushBareObject", ident"ctx")
+    else: newCall(bindSym"pushGlobalObject", ident"ctx")
+  for child in stmtList.children:
+    child.expectKind {nnkProcDef, nnkBlockStmt}
+    case child.kind
+    of nnkProcDef: outStmts.doProc child
+    of nnkBlockStmt: 
+      child[0].expectKind nnkIdent
+      outStmts.doLibBlock child[1], true, $child[0]
+    else: discard
+  outStmts.add(
+    if isObj:
+      nnkDiscardStmt.newTree newCall(
+        bindSym"putPropString",
+        ident"ctx",
+        newIntLitNode -2,
+        newStrLitNode objName
       )
-      outStmts.addFunc name, outProc, if varargsTy == jstNot: params.len else: -1
-  outStmts.add newCall(bindSym"pop", ident"ctx")
+    else: newCall(bindSym"pop", ident"ctx")
+  )
 
 macro duklib*(name, body: untyped): untyped =
   name.expectKind nnkIdent
@@ -175,6 +218,7 @@ macro duklib*(name, body: untyped): untyped =
     ],
     body = libStmts
   )
+  echo repr builder
   newLetStmt(name, nnkObjConstr.newTree(
     bindSym"DukLib",
     newColonExpr(ident"builder", builder),

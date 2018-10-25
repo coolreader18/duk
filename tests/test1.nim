@@ -13,7 +13,7 @@ import os
 var a = 2
 
 duklib testLib:
-  proc print(args: varargs[JSString]) =
+  proc print(args: varargs[typed, `$`]) =
     for a in args:
       echo a
 
@@ -26,6 +26,11 @@ duklib testLib:
   
   proc rawCtx(ctx: Context): RetT =
     discard
+  
+  block asd:
+    proc nested(str: JSString): JSInt =
+      JSInt str.len
+    
 
 const testjs = staticRead"test.js"
 

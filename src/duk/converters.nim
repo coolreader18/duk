@@ -3,18 +3,17 @@ import duk_wrapper
 import lib
 
 proc getTypeString*(val: JSVal): string =
-  case val.getType()
-  of DUK_TYPE_NONE: "none"
-  of DUK_TYPE_UNDEFINED: "undefined"
-  of DUK_TYPE_NULL: "null"
-  of DUK_TYPE_BOOLEAN: "boolean"
-  of DUK_TYPE_NUMBER: "number"
-  of DUK_TYPE_STRING: "string"
-  of DUK_TYPE_OBJECT: "object"
-  of DUK_TYPE_BUFFER: "buffer"
-  of DUK_TYPE_POINTER: "pointer"
-  of DUK_TYPE_LIGHTFUNC: "lightfunc"
-  else: "unknown"
+  case val.getDukType()
+  of dtMinNone: "none"
+  of dtUndefined: "undefined"
+  of dtNull: "null"
+  of dtBoolean: "boolean"
+  of dtNumber: "number"
+  of dtString: "string"
+  of dtObject: "object"
+  of dtBuffer: "buffer"
+  of dtPointer: "pointer"
+  of dtLightFuncMax: "function"
   
 # it's not just a normal int, it's meant to represent a boolean
 converter toBool*(dukBool: BoolT): bool =
@@ -30,11 +29,15 @@ converter convToBool*(val: JSVal): bool = val.requireBoolean
 
 converter convToString*(val: JSVal): string = $val.requireString
 
-template `$`*(val: JSVal): string = val.convToString
- 
 converter convToInt*(val: JSVal): int = val.requireInt
 
 converter convToNumber*(val: JSVal): cdouble = val.requireNumber
- 
+
 converter convToPtr*(val: JSVal): ptr = val.requirePointer
 
+proc `$`*(val: JSVal): string =
+  case val.getDukType
+  of dtBoolean: $val.getBoolean
+  of dtNumber: $val.getNumber
+  of dtString: $val.getString
+  else: nil
