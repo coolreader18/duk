@@ -76,7 +76,7 @@ proc doLibBlock(outStmts: var NimNode, stmtList: NimNode, isObj: bool, objName: 
       )
       outStmts.addFunc name, child, -1
     else:
-      var params = newSeq[(string, JSType)]()
+      var params = newSeq[JSType]()
       for i in 1..<cParams.len:
         let param = cParams[i]
         let jsTy = getJSType $param[^2]
@@ -84,23 +84,19 @@ proc doLibBlock(outStmts: var NimNode, stmtList: NimNode, isObj: bool, objName: 
           jsTy != jstNot,
           "Types for parameters in duk lib function must all be a JS`Type`"
         )
-        for parmIdent in toSeq(param.children)[0..^3]:
-          params.add ($parmIdent, jsTy)
+        for _ in toSeq(param.children)[0..^3]:
+          params.add jsTy
       retParam.expect(
         retParam.kind == nnkEmpty or getJSType($retParam) != jstNot,
         "Return type must be a JS`Type`"
       )
       var cFnStmts = newStmtList()
-      let letSec = nnkLetSection.newNimNode
-      for i, tup in params:
-        let (name, ty) = tup
-        cFnStmts.add newLetStmt(
-          ident name,
-          newCall(ty.getRequireFn, ident"ctx", newIntLitNode i)
-        )
+      var args = newSeq[NimNode]()
+      for i, ty in params:
+        args.add newCall(ty.getRequireFn, ident"ctx", newIntLitNode i)
       let cFnCall = newCall(
         newPar child,
-        params.mapIt ident it[0]
+        args
       )
       if cParams[0].kind == nnkEmpty:
         cfnStmts. add cFnCall
@@ -111,7 +107,10 @@ proc doLibBlock(outStmts: var NimNode, stmtList: NimNode, isObj: bool, objName: 
           cFnCall
         ), nnkDotExpr.newTree(newIntLitNode 1, bindSym"RetT")
       let outProc = newProc(
-        params = [bindSym"RetT", nnkIdentDefs.newTree(ident"ctx", bindSym"Context", newEmptyNode())],
+        params = [
+          bindSym"RetT",
+          nnkIdentDefs.newTree(ident"ctx", bindSym"Context", newEmptyNode())
+        ],
         body = cFnStmts,
       )
       outProc.addPragma ident"cdecl"
@@ -130,6 +129,7 @@ macro duklib*(name, body: untyped): untyped =
     ],
     body = libStmts
   )
+  echo repr builder
   newLetStmt(name, nnkObjConstr.newTree(
     bindSym"DukLib",
     newColonExpr(ident"builder", builder),
