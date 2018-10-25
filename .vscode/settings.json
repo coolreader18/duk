@@ -1,0 +1,8 @@
+{
+  "files.associations": {
+    "*.gs": "typescript",
+    "pack.mcmeta": "json",
+    ".gitpod": "yaml",
+    "duktape.h": "c"
+  }
+}
