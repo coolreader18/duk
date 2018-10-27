@@ -3,10 +3,11 @@ import duk_wrapper
 import macros
 
 type
-  MemoryFunctions* = ref object
-    alloc: AllocFunction
-    realloc: ReallocFunction
+  MemoryFunctions* = tuple[
+    alloc: AllocFunction,
+    realloc: ReallocFunction,
     free: FreeFunction
+  ]
   WrongTypeException* = object of Exception
 
 type DukType* = enum
@@ -30,8 +31,7 @@ proc len*(ctx: Context): int =
 
 proc top*(ctx: Context): JSVal = ctx[ctx.getTopIndex()]
 
-template defaultAllocFuncs: MemoryFunctions =
-  MemoryFunctions(alloc: nil, realloc: nil, free: nil)
+const defaultAllocFuncs: MemoryFunctions = (alloc: nil, realloc: nil, free: nil)
 
 proc createHeap*(
     heapUdata: pointer = nil,
