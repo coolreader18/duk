@@ -27,7 +27,7 @@ duklib testLib:
   proc rawCtx(ctx: Context): RetT =
     discard
   
-  block asd:
+  sublib asd:
     proc nested(str: JSString): JSInt =
       JSInt str.len
     

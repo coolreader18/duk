@@ -188,12 +188,15 @@ proc doLibBlock(outStmts: var NimNode, stmtList: NimNode, isObj: bool, objName: 
   outStmts.add if isObj: nnkDiscardStmt.newTree newCall(bindSym"pushBareObject", ident"ctx")
     else: newCall(bindSym"pushGlobalObject", ident"ctx")
   for child in stmtList.children:
-    child.expectKind {nnkProcDef, nnkBlockStmt}
+    child.expectKind {nnkProcDef, nnkCommand}
     case child.kind
     of nnkProcDef: outStmts.doProc child
-    of nnkBlockStmt: 
-      child[0].expectKind nnkIdent
-      outStmts.doLibBlock child[1], true, $child[0]
+    of nnkCommand: 
+      case $child[0]
+      of "sublib":
+        child[1].expectKind nnkIdent
+        outStmts.doLibBlock child[2], true, $child[1]
+      else: child[0].error("Invalid subcommand")
     else: discard
   outStmts.add(
     if isObj:
