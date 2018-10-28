@@ -3,11 +3,8 @@ import duk_wrapper
 import macros
 
 type
-  MemoryFunctions* = tuple[
-    alloc: AllocFunction,
-    realloc: ReallocFunction,
-    free: FreeFunction
-  ]
+  MemoryFunctions* =
+    tuple[alloc: AllocFunction, realloc: ReallocFunction, free: FreeFunction]
   WrongTypeException* = object of Exception
 
 type DukType* = enum

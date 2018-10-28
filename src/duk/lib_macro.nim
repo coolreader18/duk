@@ -197,7 +197,6 @@ macro duklib*(name, body: untyped): untyped =
     ],
     body = libStmts
   )
-  echo repr builder
   newLetStmt(name, nnkObjConstr.newTree(
     bindSym"DukLib",
     newColonExpr(ident"builder", builder),
