@@ -56,13 +56,6 @@ proc getPushFn(ty: JSType): NimNode =
   of jstInt: bindSym"pushInt"
   of jstNot: newEmptyNode()
 
-proc getSym(ty: JSType): NimNode =
-  case ty
-  of jstString: bindSym"JSString"
-  of jstNumber: bindSym"JSNumber"
-  of jstInt: bindSym"JSInt"
-  else: newEmptyNode()
-  
 proc injectLib*(ctx: Context, lib: DukLib) =
   lib.builder(ctx)
   
@@ -133,35 +126,18 @@ proc doProc(outStmts: var NimNode, fn: NimNode) =
     for i, ty in params:
       args.add newCall(ty.getRequireFn, ident"ctx", newIntLitNode i)
     if va.isVa:
-      args.add newBlockStmt newStmtList(
-        newVarStmt(
-          ident"va",
-          newCall(
-            nnkBracketExpr.newTree(
-              bindSym"newSeq",
-              if va.isUnTy: va.outTy
-              else: va.ty.getSym
-            )
-          )
+      args.add newCall(
+        bindSym"mapIt",
+        infix(
+          newIntLitNode params.len,
+          "..<",
+          newCall(bindSym"getTop", ident"ctx")
         ),
-        nnkForStmt.newTree(
-          ident"i",
-          infix(
-            newIntLitNode params.len,
-            "..<",
-            newCall(bindSym"getTop", ident"ctx")
-          ),
-          newCall(
-            bindSym"add",
-            ident"va",
-            newCall(
-              if va.isUnTy: va.fn
-              else: va.ty.getRequireFn,
-              nnkBracketExpr.newTree(ident"ctx", ident"i")
-            )
-          )
-        ),
-        ident"va"
+        newCall(
+          if va.isUnTy: va.fn
+          else: va.ty.getRequireFn,
+          nnkBracketExpr.newTree(ident"ctx", ident"it")
+        )
       )
     let cFnCall = newCall(
       newPar fn,
