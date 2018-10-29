@@ -37,5 +37,5 @@ converter convToPtr*(val: JSVal): ptr = val.requirePointer
 
 proc `$`*(val: JSVal): string =
   val.dup()
-  result = $val.ctx[0].toString()
+  result = $val.ctx.toString(-1)
   val.ctx.pop()
