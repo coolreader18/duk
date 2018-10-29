@@ -36,8 +36,6 @@ converter convToNumber*(val: JSVal): cdouble = val.requireNumber
 converter convToPtr*(val: JSVal): ptr = val.requirePointer
 
 proc `$`*(val: JSVal): string =
-  case val.getDukType
-  of dtBoolean: $val.getBoolean
-  of dtNumber: $val.getNumber
-  of dtString: $val.getString
-  else: nil
+  val.dup()
+  result = $val.ctx[0].toString()
+  val.ctx.pop()

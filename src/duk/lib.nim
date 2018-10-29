@@ -16,15 +16,15 @@ template getDukType*(ctx: Context, idx: IdxT): DukType =
 template getDukType*(val: JSVal): DukType =
   getDukType(val.ctx, val.idx)
 
-import converters
-export converters
-
 proc `[]`*(ctx: Context, idx: IdxT): JSVal =
   JSVal(ctx: ctx, idx: idx)
 proc `[]`*(ctx: Context, idx: BackwardsIndex): JSVal =
   JSVal(ctx: ctx, idx: -int(idx))
 proc len*(ctx: Context): int =
   ctx.getTop()
+
+import converters
+export converters
 
 proc top*(ctx: Context): JSVal = ctx[ctx.getTopIndex()]
 
