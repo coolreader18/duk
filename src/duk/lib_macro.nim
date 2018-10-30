@@ -1,6 +1,6 @@
 import macros, sequtils, sugar
 
-import duk_wrapper, consts, lib
+import duktape_wrapper, consts, lib
 
 proc error(n: NimNode, msg: string) = error(msg, n)
 proc expect(n: NimNode, cond: bool, msg: string) =

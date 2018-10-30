@@ -1,5 +1,5 @@
 import os
-import duk_wrapper
+import duktape_wrapper
 import macros
 
 type

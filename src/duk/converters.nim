@@ -1,4 +1,4 @@
-import duk_wrapper
+import duktape_wrapper
 
 import lib
 
@@ -17,23 +17,12 @@ proc getTypeString*(val: JSVal): string =
   
 # it's not just a normal int, it's meant to represent a boolean
 converter toBool*(dukBool: BoolT): bool =
-  case dukBool
-  of 0.BoolT, 1.BoolT: cint(dukBool) == 1
+  case dukBool.cint
+  of 0, 1: dukBool.cint == 1
   else: raise newException(
     Exception,
     "Invalid value for `duk.BoolT`, why are you making your own `BoolT`s"
   )
-
-
-converter convToBool*(val: JSVal): bool = val.requireBoolean
-
-converter convToString*(val: JSVal): string = $val.requireString
-
-converter convToInt*(val: JSVal): int = val.requireInt
-
-converter convToNumber*(val: JSVal): cdouble = val.requireNumber
-
-converter convToPtr*(val: JSVal): ptr = val.requirePointer
 
 proc `$`*(val: JSVal): string =
   val.dup()
