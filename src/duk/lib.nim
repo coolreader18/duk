@@ -12,22 +12,22 @@ type DukType* = enum
 
 template getDukType*(ctx: Context, idx: IdxT): DukType =
   DukType ctx.getType(idx)
-template getDukType*(val: JSVal): DukType =
+template getDukType*(val: StackPtr): DukType =
   getDukType(val.ctx, val.idx)
 
 import converters
 export converters
 
-proc `[]`*(ctx: Context, idx: IdxT): JSVal =
+proc `[]`*(ctx: Context, idx: IdxT): StackPtr =
   if not ctx.isValidIndex(idx):
     raise newException(IndexError, "Index" & $idx & "is not valid for context")
-  JSVal(ctx: ctx, idx: idx)
-template `[]`*(ctx: Context, idx: BackwardsIndex): JSVal =
+  (ctx: ctx, idx: idx)
+template `[]`*(ctx: Context, idx: BackwardsIndex): StackPtr =
   ctx[-idx.IdxT]
 proc len*(ctx: Context): int =
   ctx.getTop()
 
-proc top*(ctx: Context): JSVal = ctx[ctx.getTopIndex()]
+proc top*(ctx: Context): StackPtr = ctx[ctx.getTopIndex()]
 
 const defaultAllocFuncs: MemoryFunctions = (alloc: nil, realloc: nil, free: nil)
 

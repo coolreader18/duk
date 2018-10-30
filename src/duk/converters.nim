@@ -2,7 +2,7 @@ import duktape_wrapper
 
 import lib
 
-proc getTypeString*(val: JSVal): string =
+proc getTypeString*(val: StackPtr): string =
   case val.getDukType()
   of dtMinNone: "none"
   of dtUndefined: "undefined"
@@ -24,7 +24,7 @@ converter toBool*(dukBool: BoolT): bool =
     "Invalid value for `duk.BoolT`, why are you making your own `BoolT`s"
   )
 
-proc `$`*(val: JSVal): string =
+proc `$`*(val: StackPtr): string =
   val.dup()
   result = $val.ctx.toString(-1)
   val.ctx.pop()
