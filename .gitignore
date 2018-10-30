@@ -1,2 +1,3 @@
 /duktape/
 /tests/test1
+/src/duk/duk_wrapper.nim
