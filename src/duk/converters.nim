@@ -3,17 +3,16 @@ import duktape_wrapper
 import lib
 
 proc getTypeString*(val: StackPtr): string =
-  case val.getDukType()
-  of dtMinNone: "none"
-  of dtUndefined: "undefined"
-  of dtNull: "null"
-  of dtBoolean: "boolean"
-  of dtNumber: "number"
-  of dtString: "string"
-  of dtObject: "object"
-  of dtBuffer: "buffer"
-  of dtPointer: "pointer"
-  of dtLightFuncMax: "function"
+  case val.getJSType()
+  of jstMinNone: "none"
+  of jstUndefined: "undefined"
+  of jstNull: "null"
+  of jstBoolean: "boolean"
+  of jstNumber: "number"
+  of jstString: "string"
+  of jstObject, jstArray, jstBuffer: "object"
+  of jstPointer: "pointer"
+  of jstLightFuncMax: "function"
   
 # it's not just a normal int, it's meant to represent a boolean
 converter toBool*(dukBool: BoolT): bool =
@@ -23,8 +22,20 @@ converter toBool*(dukBool: BoolT): bool =
     Exception,
     "Invalid value for `duk.BoolT`, why are you making your own `BoolT`s"
   )
+converter toBoolT*(boolean: bool): BoolT =
+  if boolean: 1.BoolT
+  else: 0.BoolT
 
 proc `$`*(val: StackPtr): string =
   val.dup()
   result = $val.ctx.toString(-1)
   val.ctx.pop()
+
+converter newJSVal*(num: SomeNumber): JSVal =
+  JSVal(ty: jstNumber, numberVal: num.cdouble)
+converter newJSVal*(str: string): JSVal =
+  JSVal(ty: jstString, stringVal: str.cstring)
+converter newJSVal*(boolean: bool): JSVal =
+  JSVal(ty: jstBoolean, booleanVal: boolean)
+converter newJSVal*(arr: seq[JSVal]): JSVal =
+  JSVal(ty: jstArray, arrayVal: arr)

@@ -27,16 +27,24 @@ duklib testLib:
   proc rawCtx(ctx: Context): RetT =
     discard
   
+  proc getArr(): JSSeq =
+    jsSeq(9, 10)
+
   sublib asd:
     proc nested(str: JSString): JSInt =
       JSInt str.len
-    
+
 
 const testjs = staticRead"test.js"
 
+# var ctx: Context
+# ctx.pushArray()
+
+import strutils
 test "ffi":
   var ctx = createHeap()
   ctx.injectLib testLib
-  ctx.loadJS testjs, "test.js"
+  const sourcePath = currentSourcePath().split({'\\', '/'})[0..^2].join("/")
+  ctx.loadFile sourcePath / "test.js"
   echo "val of a: ", a
   check a == 22

@@ -27,19 +27,21 @@ type
   JSString* = cstring
   JSNumber* = cdouble
   JSInt* = cint
+  JSSeq* = seq[JSVal]
   
 type DukLib* = ref object
   builder: proc(ctx: Context)
   name*: string
   
 type JSType = enum
-  jstString, jstNumber, jstInt, jstNot
+  jstString, jstNumber, jstInt, jstSeq, jstNot
 
 proc getJSType(ty: string): JSType =
   case ty
   of "JSString": jstString
   of "JSNumber": jstNumber
   of "JSInt": jstInt
+  of "JSSeq": jstSeq
   else: jstNot
 
 proc getRequireFn(ty: JSType): NimNode = 
@@ -47,6 +49,7 @@ proc getRequireFn(ty: JSType): NimNode =
   of jstString: bindSym"requireString"
   of jstNumber: bindSym"requireNumber"
   of jstInt: bindSym"requireInt"
+  of jstSeq: bindSym"requireArray"
   of jstNot: newEmptyNode()
 
 proc getPushFn(ty: JSType): NimNode =
@@ -54,6 +57,7 @@ proc getPushFn(ty: JSType): NimNode =
   of jstString: bindSym"pushString"
   of jstNumber: bindSym"pushNumber"
   of jstInt: bindSym"pushInt"
+  of jstSeq: bindSym"pushArray"
   of jstNot: newEmptyNode()
 
 proc injectLib*(ctx: Context, lib: DukLib) =
@@ -202,4 +206,3 @@ macro duklib*(name, body: untyped): untyped =
     newColonExpr(ident"builder", builder),
     newColonExpr(ident"name", newStrLitNode $name)
   ))
-
