@@ -34,11 +34,7 @@ duklib testLib:
     proc nested(str: JSString): JSInt =
       JSInt str.len
 
-
 const testjs = staticRead"test.js"
-
-# var ctx: Context
-# ctx.pushArray()
 
 import strutils
 test "ffi":
