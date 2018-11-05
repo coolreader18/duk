@@ -31,7 +31,7 @@ proc getJSType*(ctx: Context, idx: IdxT): JSType {.dukCtxPtrProc.} =
     jstArray
   else:
     ty.JSType
-
+    
 import converters
 export converters
 
@@ -145,3 +145,18 @@ template newJSArray*(arr: varargs[untyped, newJSVal]): JSVal =
 
 proc loadFile*(ctx: Context, filename: string) =
   ctx.loadJS readFile filename, filename
+
+proc getJSVal*(val: StackPtr): JSVal =
+  let ty = val.getJSType
+  result.ty = ty
+  case ty
+  of jstBoolean: result.booleanVal = val.getBoolean()
+  of jstNumber: result.numberVal = val.getNumber()
+  of jstString: result.stringVal = val.getString()
+  of jstObject: discard # TODO: Implement object representation
+  of jstBuffer: result.bufferVal = val.getBuffer(addr result.bufferSize)
+  of jstPointer: result.pointerVal = val.getPointer()
+  of jstLightFuncmax: discard # TODO: Implement lightfunc representation
+  of jstArray: result.arrayVal = mapIt(val.getArray(), it.getJsVal)
+  else: discard # don't have fields in JSValObj
+proc getJSVal*(ctx: Context, idx: IdxT): JSVal = ctx[idx].getJSVal
