@@ -35,14 +35,6 @@ proc getRequireFn(ty: JSType): NimNode =
   of jstSeq: bindSym"requireArray"
   of jstNot: newEmptyNode()
 
-proc getPushFn(ty: JSType): NimNode =
-  case ty
-  of jstString: bindSym"pushString"
-  of jstNumber: bindSym"pushNumber"
-  of jstInt: bindSym"pushInt"
-  of jstSeq: bindSym"pushArray"
-  of jstNot: newEmptyNode()
-
 proc injectLib*(ctx: Context, idx: IdxT, lib: DukLib) {.dukCtxPtrProc.} =
   lib.builder(ctx, ctx.requireNormalizeIndex idx)
 proc injectLibGlobal*(ctx: Context, lib: DukLib) =
@@ -129,7 +121,7 @@ macro pushProc*(ctx: Context, fn: untyped): untyped =
     cfnStmts.add cFnCall
   else:
     cfnStmts.add newCall(
-      getJSType($retParam).getPushFn,
+      bindSym"pushAny",
       ident"ctx",
       cFnCall
     ), bindSym"DUK_RET_RETURN"
