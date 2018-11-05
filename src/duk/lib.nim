@@ -145,6 +145,3 @@ template newJSArray*(arr: varargs[untyped, newJSVal]): JSVal =
 
 proc loadFile*(ctx: Context, filename: string) =
   ctx.loadJS readFile filename, filename
-    
-import lib_macro
-export lib_macro
