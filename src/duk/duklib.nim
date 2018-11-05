@@ -1,20 +1,19 @@
 import macros, sequtils, sugar
 
-import duktape_wrapper, consts, lib, pushproc
+import duktape_wrapper, consts, lib, ctx_val_proc
 
 proc error(n: NimNode, msg: string) = error(msg, n)
 proc expect(n: NimNode, cond: bool, msg: string) =
   if not cond: n.error(msg)
-
 
 type
   JSString* = cstring
   JSNumber* = cdouble
   JSInt* = cint
   JSSeq* = seq[JSVal]
-  
+
 type DukLib* = ref object
-  builder: proc(ctx: Context)
+  builder: proc(ctx: Context, idx: IdxT)
   name*: string
   
 type JSType = enum
@@ -44,34 +43,17 @@ proc getPushFn(ty: JSType): NimNode =
   of jstSeq: bindSym"pushArray"
   of jstNot: newEmptyNode()
 
-proc injectLib*(ctx: Context, lib: DukLib) =
-  lib.builder(ctx)
+proc injectLib*(ctx: Context, idx: IdxT, lib: DukLib) {.dukCtxPtrProc.} =
+  lib.builder(ctx, ctx.requireNormalizeIndex idx)
+proc injectLibGlobal*(ctx: Context, lib: DukLib) =
+  ctx.pushGlobalObject()
+  ctx.injectLib(-1, lib)
+  ctx.pop()
+proc injectLibNamespace*(ctx: Context, lib: DukLib, name: string) =
+  let idx = ctx.pushBareObject()
+  ctx.injectLib(idx, lib)
+  discard ctx.putGlobalString(name)
   
-type VarargsInfo = tuple[isVa: bool, ty: JSType, isUnTy: bool, fn: NimNode, outTy: NimNode]
-
-proc doVarargs(va: var VarargsInfo, parTy: NimNode) =
-  va.isVa = true
-  if $parTy[1] == "typed":
-    parTy.expect(
-      parTy.len == 3,
-      "If the varargs is `typed`, there needs to be a transformer function"
-    )
-    va.isUnTy = true
-    va.fn = parTy[2]
-    va.outTy = newCall(
-      ident"type",
-      va.fn.newCall bindSym"top".newCall bindSym"createHeap".newCall,
-    )
-    parTy[1] = va.outTy
-    parTy.del 2
-  else:
-    let jsTy = getJSType $parTy[1]
-    parTy.expect(
-      jsTy != jstNot,
-      "Types for parameters in duk lib function must all be a JS`Type`"
-    )
-    va.ty = jsTy
-
 proc makePushCall(fn: NimNode, nargs: int): NimNode =
   fn.addPragma ident"cdecl"
   nnkDiscardStmt.newTree newCall(
@@ -90,9 +72,8 @@ macro pushProc*(ctx: Context, fn: untyped): untyped =
       "Return type for processing the raw context must be `RetT`"
     )
     return makePushCall(fn, -1)
-
   var params = newSeq[JSType]()
-  var va: VarargsInfo
+  var va: tuple[isVa: bool, ty: JSType, hasFn: bool, fn: NimNode]
   for i in 1..<cParams.len:
     let param = cParams[i]
     let parTy = param[^2]
@@ -102,7 +83,13 @@ macro pushProc*(ctx: Context, fn: untyped): untyped =
         param.len == 3 and i == cParams.len - 1,
         "Only one vararg can be in a parameter list, and at the end"
       )
-      va.doVarargs parTy
+      va.isVa = true
+      case parTy.len
+      of 2: va.ty = getJSType $parTy[1]
+      of 3:
+        va.hasFn = true
+        va.fn = parTy[2]
+      else: parTy.error("Malformed varargs")
       continue
     parTy.expectKind nnkIdent
     let jsTy = getJSType $parTy
@@ -129,7 +116,7 @@ macro pushProc*(ctx: Context, fn: untyped): untyped =
         newCall(bindSym"getTop", ident"ctx")
       ),
       newCall(
-        if va.isUnTy: va.fn
+        if va.hasFn: va.fn
         else: va.ty.getRequireFn,
         nnkBracketExpr.newTree(ident"ctx", ident"it")
       )
@@ -155,40 +142,57 @@ macro pushProc*(ctx: Context, fn: untyped): untyped =
   )
   makePushCall(outProc, if va.isVa: -1 else: params.len)
 
-proc doLibBlock(outStmts: var NimNode, stmtList: NimNode, isObj: bool, objName: string = "") =
-  outStmts.add if isObj: nnkDiscardStmt.newTree newCall(bindSym"pushBareObject", ident"ctx")
-    else: newCall(bindSym"pushGlobalObject", ident"ctx")
+type BlockInfo = ref object
+  case isNested: bool
+  of true: objName: string
+  of false: discard
+
+proc doLibBlock(outStmts: var NimNode, stmtList: NimNode, info: BlockInfo) =
+  let isNested = info.isNested
+  let tIdx = if isNested: newIntLitNode -2 else: ident"tIdx"
+  if isNested: outStmts.add nnkDiscardStmt.newTree newCall(bindSym"pushBareObject", ident"ctx")
   for child in stmtList.children:
     child.expectKind {nnkProcDef, nnkCommand}
     case child.kind
-    of nnkProcDef: outStmts.add newCall(ident"ctx", child)
+    of nnkProcDef:
+      let name = $child.name
+      child.name = newEmptyNode()
+      outStmts.add(
+        newCall(bindSym"pushProc", ident"ctx", child),
+        nnkDiscardStmt.newTree newCall(
+          bindSym"putPropString",
+          ident"ctx",
+          tIdx,
+          newStrLitNode name
+        )
+      )
     of nnkCommand: 
       case $child[0]
       of "sublib":
         child[1].expectKind nnkIdent
-        outStmts.doLibBlock child[2], true, $child[1]
+        outStmts.doLibBlock child[2], BlockInfo(isNested: true, objName: $child[1])
       else: child[0].error("Invalid subcommand")
     else: discard
-  outStmts.add(
-    if isObj:
+  if isNested:
+    outStmts.add(
       nnkDiscardStmt.newTree newCall(
         bindSym"putPropString",
         ident"ctx",
-        newIntLitNode -2,
-        newStrLitNode objName
+        tIdx,
+        newStrLitNode info.objName
       )
-    else: newCall(bindSym"pop", ident"ctx")
-  )
+    )
 
 macro duklib*(name, body: untyped): untyped =
   name.expectKind nnkIdent
   body.expectKind nnkStmtList
   var libStmts = newStmtList()
-  libStmts.doLibBlock body, false
+  libStmts.doLibBlock body, BlockInfo(isNested: false)
   let builder = newProc(
     params = [
       newEmptyNode(),
-      nnkIdentDefs.newTree(ident"ctx", bindSym"Context", newEmptyNode())
+      nnkIdentDefs.newTree(ident"ctx", bindSym"Context", newEmptyNode()),
+      nnkIdentDefs.newTree(ident"tIdx", bindSym"IdxT", newEmptyNode())
     ],
     body = libStmts
   )

@@ -7,13 +7,19 @@
 
 import unittest
 
+import os, terminal, strutils
 import duk
-import os
 
 var a = 2
 
 duklib testLib:
-  proc print(args: varargs[typed, `$`]) =
+  proc pass() =
+    styledEcho styleBright, fgGreen, "passed", resetStyle
+
+  proc fail() =
+    styledEcho styleBright, fgRed, "failed", resetStyle
+  
+  proc print(args: varargs[string, `$`]) =
     for a in args:
       echo a
 
@@ -36,10 +42,10 @@ duklib testLib:
 
 const testjs = staticRead"test.js"
 
-import strutils
 test "ffi":
   var ctx = createHeap()
-  ctx.injectLib testLib
+  ctx.injectLibGlobal testLib
+  ctx.injectLibNamespace testLib, "tester"
   const sourcePath = currentSourcePath().split({'\\', '/'})[0..^2].join("/")
   ctx.loadFile sourcePath / "test.js"
   echo "val of a: ", a
