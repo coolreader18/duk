@@ -41,6 +41,7 @@ converter newJSVal*(arr: seq[JSVal]): JSVal =
   JSVal(ty: jstArray, arrayVal: arr)
 # string, number, int, array
 template pushAny*(ctx: Context, num: cdouble) = ctx.pushNumber num
+template pushAny*(ctx: Context, num: cint) = ctx.pushInt num
 template pushAny*(ctx: Context, str: string) = ctx.pushLstring str.cstring, str.len
 template pushAny*(ctx: Context, boolean: bool) = ctx.pushBoolean boolean
 template pushAny*(ctx: Context, arr: seq[JSVal]) = ctx.pushArray arr

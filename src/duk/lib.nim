@@ -83,7 +83,8 @@ proc syntaxError*(ctx: Context, msg: string) = ctx.errorRaw(DUK_ERR_SYNTAX_ERROR
 proc typeError*(ctx: Context, msg: string) = ctx.errorRaw(DUK_ERR_TYPE_ERROR, msg)
 proc uriError*(ctx: Context, msg: string) = ctx.errorRaw(DUK_ERR_URI_ERROR, msg)
 
-proc `=`(d: var Context, src: Context) {.borrow.}
+proc `=`(d: var Context, src: Context) =
+  d = src
 
 iterator enumNext*(ctx: Context, idx: IdxT): StackPtr {.dukCtxPtrProc.} =
   while ctx[idx].next(false):
@@ -156,7 +157,8 @@ proc getJSVal*(val: StackPtr): JSVal =
   of jstObject: discard # TODO: Implement object representation
   of jstBuffer: result.bufferVal = val.getBuffer(addr result.bufferSize)
   of jstPointer: result.pointerVal = val.getPointer()
-  of jstLightFuncmax: discard # TODO: Implement lightfunc representation
+  of jstLightFuncMax:
+    raise newException(Exception, "Function cannot be represented as a JSVal")
   of jstArray: result.arrayVal = mapIt(val.getArray(), it.getJsVal)
   else: discard # don't have fields in JSValObj
 proc getJSVal*(ctx: Context, idx: IdxT): JSVal = ctx[idx].getJSVal

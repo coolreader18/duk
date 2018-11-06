@@ -7,29 +7,62 @@
 
 import unittest
 
-import os, terminal, strutils
+import os, terminal, strutils, sets
 import duk
 
-var a = 2
+var curTest: string
 
 duklib testLib:
-  proc pass() =
-    styledEcho styleBright, fgGreen, "passed", resetStyle
+  proc test(name: JSString, fn: StackPtr) =
+    curTest = $name
+    test "jstest " & curTest:
+      fn.dup()
+      let failed = ctx.pcall(0) != 0
+      var errMsg: string
+      if failed:
+        ctx[^1].`enum`(0)
+        for k in ctx[^1].enumNext:
+          echo k
+        ctx.pop()
+      ctx.pop2()
+      if failed:
+        styledEcho styleBright, fgRed, "error: ", resetStyle, errMsg 
+        fail()
+  proc assert(cond: JSBool, msg: JSString) =
+    if not cond:
+      ctx.errorRaw DUK_ERR_ERROR, "Assertion failed"
 
-  proc fail() =
-    styledEcho styleBright, fgRed, "failed", resetStyle
-  
   proc print(args: varargs[string, `$`]) =
     for a in args:
       echo a
 
-  proc setA(newA, b: JSInt) =
-    a = newA
+const sourcePath = currentSourcePath().split({'\\', '/'})[0..^2].join("/")
+
+proc makeCtx(): Context =
+  result = createHeap()
+  result.injectLibGlobal testLib
+proc makeCtx(file: string, lib: DukLib = nil): Context =
+  result = makeCtx()
+  if lib != nil:
+    result.injectLibGlobal lib
+  result.loadFile sourcePath / file
+
+var crossVar = 0
+
+duklib setLib:
+  proc setVar(newA, b: JSInt) =
+    crossVar = newA
     echo b
 
   proc get22(): JSInt =
     22
-  
+
+test "set values":
+  var ctx = makeCtx("settest.js", setLib)
+  echo "val of crossVar: ", crossVar
+  check crossVar == 22
+
+duklib generalLib:
   proc rawCtx(ctx: Context): RetT =
     discard
   
@@ -40,13 +73,8 @@ duklib testLib:
     proc nested(str: JSString): JSInt =
       JSInt str.len
 
-const testjs = staticRead"test.js"
-
-test "ffi":
-  var ctx = createHeap()
-  ctx.injectLibGlobal testLib
-  ctx.injectLibNamespace testLib, "tester"
-  const sourcePath = currentSourcePath().split({'\\', '/'})[0..^2].join("/")
+suite "general_js_tests":
+  var ctx = makeCtx()
+  ctx.injectLibGlobal generalLib
+  ctx.injectLibNamespace generalLib, "tester"
   ctx.loadFile sourcePath / "test.js"
-  echo "val of a: ", a
-  check a == 22

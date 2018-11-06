@@ -11,13 +11,14 @@ type
   JSNumber* = cdouble
   JSInt* = cint
   JSSeq* = seq[JSVal]
+  JSBool* = bool
 
 type DukLib* = ref object
   builder: proc(ctx: Context, idx: IdxT)
   name*: string
   
 type JSType = enum
-  jstString, jstNumber, jstInt, jstSeq, jstNot
+  jstString, jstNumber, jstBoolean, jstInt, jstSeq, jstStackPtr, jstNot
 
 proc getJSType(ty: string): JSType =
   case ty
@@ -25,6 +26,8 @@ proc getJSType(ty: string): JSType =
   of "JSNumber": jstNumber
   of "JSInt": jstInt
   of "JSSeq": jstSeq
+  of "JSBool": jstBoolean
+  of "StackPtr": jstStackPtr
   else: jstNot
 
 proc getRequireFn(ty: JSType): NimNode = 
@@ -33,6 +36,8 @@ proc getRequireFn(ty: JSType): NimNode =
   of jstNumber: bindSym"requireNumber"
   of jstInt: bindSym"requireInt"
   of jstSeq: bindSym"requireArray"
+  of jstBoolean: bindSym"requireBoolean"
+  of jstStackPtr: bindSym"[]"
   of jstNot: newEmptyNode()
 
 proc injectLib*(ctx: Context, idx: IdxT, lib: DukLib) {.dukCtxPtrProc.} =
@@ -87,7 +92,7 @@ macro pushProc*(ctx: Context, fn: untyped): untyped =
     let jsTy = getJSType $parTy
     param.expect(
       jsTy != jstNot,
-      "Types for parameters in duk lib function must all be a JS`Type`"
+      "Types for parameters in duk lib function must all be a JS`Type` or StackPtr"
     )
     for _ in toSeq(param.children)[0..^3]:
       params.add jsTy
