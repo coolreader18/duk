@@ -1,4 +1,4 @@
-test("type coercions", function() {
+test("type_coercions", function() {
   print("from js", true, 9);
 });
 

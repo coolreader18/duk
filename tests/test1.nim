@@ -10,12 +10,9 @@ import unittest
 import os, terminal, strutils, sets
 import duk
 
-var curTest: string
-
 duklib testLib:
   proc test(name: JSString, fn: StackPtr) =
-    curTest = $name
-    test "jstest " & curTest:
+    test $name:
       fn.dup()
       let failed = ctx.pcall(0) != 0
       var errMsg: string
