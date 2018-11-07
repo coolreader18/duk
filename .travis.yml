@@ -1,0 +1,14 @@
+sudo: required
+language: minimal
+before_install:
+  - curl https://nim-lang.org/choosenim/init.sh -sSfO
+  - sh init.sh -y
+cache:
+  directories:
+    - $HOME/.choosenim
+    - $HOME/.nimble
+script:
+  - export PATH=~/.nimble/bin:"$PATH"
+  - nimble install -dy
+  - nimble setup
+  - nimble test
